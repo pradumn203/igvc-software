@@ -9,6 +9,7 @@
 #include <unordered_set>
 #include "camera_config.h"
 #include "map_config.h"
+#include "../inverse_projection_mapping/IPM.h"
 
 PLUGINLIB_EXPORT_CLASS(line_layer::LineLayer, costmap_2d::Layer)
 
@@ -198,8 +199,49 @@ void LineLayer::projectImage(const cv::Mat &segmented_mat, const geometry_msgs::
   grid_map::Index camera_index;  // Center of line_buffer_ and freespace_buffer_
   map_.getIndex({ translate_vector.x, translate_vector.y }, camera_index);
 
-  constexpr uchar true_val = 255U;
+    // Show image information
+    int height_crop = rows - 249;
 
+    // The 4-points at the input image
+    std::vector<cv::Point2f> origPoints;
+    origPoints.push_back( cv::Point2f(0, height_crop) );
+    origPoints.push_back( cv::Point2f(cols, height_crop) );
+    origPoints.push_back( cv::Point2f(cols/2 + 50, 0) );
+    origPoints.push_back( cv::Point2f(cols/2 - 30, 0) );
+
+    // The 4-points correspondences in the destination image
+    std::vector<cv::Point2f> dstPoints;
+    dstPoints.push_back( cv::Point2f(cols/2-50, rows) );
+    dstPoints.push_back( cv::Point2f(cols/2+100, rows) );
+    dstPoints.push_back( cv::Point2f(cols/2 + 50, 0) );
+    dstPoints.push_back( cv::Point2f(cols/2 - 30, 0) );
+
+    // IPM object
+    IPM ipm( cv::Size(cols, rows), cv::Size(cols, rows), origPoints, dstPoints );
+    cv::Mat ipmImg;
+    ipm.applyHomography( segmented_mat, ipmImg );
+
+    constexpr uchar true_val = 255U;
+
+//    for (int i = 0; i < rows; i++) {
+//        const auto *row_ptr = ipmImg.ptr<uchar>(i);
+//        for (int j = 0; j < cols; j++) {
+//            bool is_line = row_ptr[j] == true_val;
+//            grid_map::Index point_index;
+//            map_.getIndex({ i, j }, point_index);
+//            if (buffer_rect.contains({ point_index[0], point_index[1] }))
+//            {
+//                if (is_line)
+//                {
+//                    line_buffer_.at<uchar>(point_index[0], point_index[1]) = true_val;
+//                }
+//                else
+//                {
+//                    freespace_buffer_.at<uchar>(point_index[0], point_index[1]) = true_val;
+//                }
+//            }
+//        }
+//    }
   for (int i = 0; i < rows; i++)
   {
     const auto *row_ptr = segmented_mat.ptr<uchar>(i);
@@ -231,6 +273,7 @@ void LineLayer::projectImage(const cv::Mat &segmented_mat, const geometry_msgs::
       }
     }
   }
+
 }
 
 grid_map::Index LineLayer::calculateBufferIndex(const Eigen::Vector3f &point, const grid_map::Index &camera_index) const
